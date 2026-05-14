@@ -2,10 +2,12 @@ from flask import Flask, render_template_string, request
 import pandas as pd
 from datetime import datetime
 import os
+import shutil
 
 app = Flask(__name__)
 
 FILE_PATH = "Inventory.xlsx"
+BACKUP_PATH = "Inventory_backup.xlsx"
 
 # -----------------------------
 # ✅ CREATE FILE IF NOT EXIST
@@ -26,17 +28,27 @@ def load_excel():
 # ✅ SAVE EXCEL
 # -----------------------------
 def save_excel(df):
-    try:
-        df.to_excel(FILE_PATH, index=False)
-    except PermissionError:
-        print("Close Excel file first!")
+    df.to_excel(FILE_PATH, index=False)
 
 # -----------------------------
-# ✅ CLEAR RECORD
+# ✅ CLEAR RECORD (WITH BACKUP)
 # -----------------------------
 def clear_records():
+    # Save backup before deleting
+    if os.path.exists(FILE_PATH):
+        shutil.copy(FILE_PATH, BACKUP_PATH)
+
     df = pd.DataFrame(columns=["No", "Name", "ID", "Item", "Date", "Out", "In"])
     df.to_excel(FILE_PATH, index=False)
+
+# -----------------------------
+# ✅ UNDO DELETE
+# -----------------------------
+def undo_delete():
+    if os.path.exists(BACKUP_PATH):
+        shutil.copy(BACKUP_PATH, FILE_PATH)
+        return True
+    return False
 
 # -----------------------------
 # ✅ MAIN ROUTE
@@ -48,11 +60,19 @@ def index():
 
     if request.method == "POST":
 
-        # 🔴 CLEAR BUTTON
+        # 🔴 CLEAR RECORDS
         if "clear" in request.form:
             clear_records()
             df = load_excel()
-            message = "🗑️ All records cleared!"
+            message = "🗑️ Records cleared! (You can undo)"
+
+        # 🔄 UNDO DELETE
+        elif "undo" in request.form:
+            if undo_delete():
+                df = load_excel()
+                message = "↩️ Undo successful! Records restored"
+            else:
+                message = "❌ No backup found"
 
         else:
             name = request.form.get("name")
@@ -72,12 +92,10 @@ def index():
                 ]
 
                 if not match.empty:
-                    # ✅ SECOND SCAN → IN
                     index_to_update = match.index[0]
                     df.at[index_to_update, "In"] = current_time
                     message = "✅ Item returned (IN recorded)"
                 else:
-                    # ✅ FIRST SCAN → OUT
                     new_row = {
                         "No": len(df) + 1,
                         "Name": name,
@@ -115,11 +133,18 @@ def index():
 
         <br>
 
-        <!-- 🔴 CLEAR BUTTON -->
-        <form method="POST">
+        <!-- CLEAR BUTTON -->
+        <form method="POST" style="display:inline;">
             <button type="submit" name="clear"
-                onclick="return confirm('Are you sure you want to delete ALL records?');">
-                🗑️ Clear All Records
+                onclick="return confirm('Delete ALL records?');">
+                🗑️ Clear Records
+            </button>
+        </form>
+
+        <!-- UNDO BUTTON -->
+        <form method="POST" style="display:inline;">
+            <button type="submit" name="undo">
+                ↩️ Undo Delete
             </button>
         </form>
 
