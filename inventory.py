@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import os
 import shutil
+import pytz   # ✅ timezone fix
 
 app = Flask(__name__)
 
@@ -134,9 +135,12 @@ def index():
 
             if name and staff_id and item:
 
-                # ✅ DUPLICATE SCAN CONTROL
+                # ✅ TIMEZONE FIX (Singapore/Malaysia)
+                tz = pytz.timezone("Asia/Singapore")
+                now = datetime.now(tz)
+
+                # ✅ Duplicate scan control
                 scan_key = f"{name}-{staff_id}-{item}"
-                now = datetime.now()
 
                 if LAST_SCAN["key"] == scan_key:
                     diff = (now - LAST_SCAN["time"]).total_seconds()
@@ -153,6 +157,7 @@ def index():
                 current_time = now.strftime("%H:%M:%S")
                 current_date = now.strftime("%d/%m/%y")
 
+                # ✅ Check existing open record
                 match = df[
                     (df["Name"] == name) &
                     (df["ID"].astype(str) == str(staff_id)) &
