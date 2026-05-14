@@ -28,8 +28,7 @@ def create_file():
 # -----------------------------
 def load_excel():
     create_file()
-    df = pd.read_excel(FILE_PATH)
-    return df.fillna("")
+    return pd.read_excel(FILE_PATH).fillna("")
 
 
 # -----------------------------
@@ -70,19 +69,20 @@ def index():
 
     template = """
     <html>
-    <head>
-        <title>Inventory Scanner</title>
-    </head>
     <body>
 
         <h1>📦 Inventory Scanner</h1>
 
-        <h3>Scan Barcode</h3>
         <form method="POST">
-            <input type="text" name="barcode" id="barcode" autofocus
-                style="width:300px; height:40px; font-size:18px;"
-                placeholder="Scan barcode here..."
-                oninput="this.form.submit()">
+            Name: <input name="name" required><br><br>
+            ID: <input name="id" required><br><br>
+
+            Scan Item:
+            <input type="text" name="item" id="barcode" autofocus
+                style="width:250px; height:35px;">
+            <br><br>
+
+            <button type="submit">Submit</button>
         </form>
 
         <br>
@@ -90,12 +90,12 @@ def index():
         <form method="POST" style="display:inline;">
             <button name="clear"
                 onclick="return confirm('Delete ALL records?');">
-                🗑️ Clear Records
+                🗑️ Clear
             </button>
         </form>
 
         <form method="POST" style="display:inline;">
-            <button name="undo">↩️ Undo Delete</button>
+            <button name="undo">↩️ Undo</button>
         </form>
 
         <p>{{message}}</p>
@@ -117,7 +117,7 @@ def index():
         if "clear" in request.form:
             clear_records()
             df = load_excel()
-            message = "🗑️ Records cleared (can undo)"
+            message = "🗑️ Records cleared"
 
         # ↩️ UNDO
         elif "undo" in request.form:
@@ -127,62 +127,61 @@ def index():
             else:
                 message = "❌ No backup found"
 
-        # 📡 BARCODE SCAN
         else:
-            barcode = request.form.get("barcode")
+            name = request.form.get("name")
+            staff_id = request.form.get("id")
+            item = request.form.get("item")
 
-            if barcode:
-                try:
-                    name, staff_id, item = barcode.split("|")
+            if name and staff_id and item:
 
-                    scan_key = f"{name}-{staff_id}-{item}"
-                    now = datetime.now()
+                # ✅ DUPLICATE SCAN CONTROL
+                scan_key = f"{name}-{staff_id}-{item}"
+                now = datetime.now()
 
-                    # ✅ DUPLICATE BLOCK
-                    if LAST_SCAN["key"] == scan_key:
-                        diff = (now - LAST_SCAN["time"]).total_seconds()
-                        if diff < BLOCK_SECONDS:
-                            return render_template_string(
-                                template,
-                                message=f"⚠️ Duplicate blocked ({int(diff)}s)",
-                                table=df.to_html(index=False)
-                            )
+                if LAST_SCAN["key"] == scan_key:
+                    diff = (now - LAST_SCAN["time"]).total_seconds()
+                    if diff < BLOCK_SECONDS:
+                        return render_template_string(
+                            template,
+                            message=f"⚠️ Duplicate blocked ({int(diff)}s)",
+                            table=df.to_html(index=False)
+                        )
 
-                    LAST_SCAN["key"] = scan_key
-                    LAST_SCAN["time"] = now
+                LAST_SCAN["key"] = scan_key
+                LAST_SCAN["time"] = now
 
-                    current_time = now.strftime("%H:%M:%S")
-                    current_date = now.strftime("%d/%m/%y")
+                current_time = now.strftime("%H:%M:%S")
+                current_date = now.strftime("%d/%m/%y")
 
-                    match = df[
-                        (df["Name"] == name) &
-                        (df["ID"].astype(str) == str(staff_id)) &
-                        (df["Item"] == item) &
-                        (df["In"] == "")
-                    ]
+                match = df[
+                    (df["Name"] == name) &
+                    (df["ID"].astype(str) == str(staff_id)) &
+                    (df["Item"] == item) &
+                    (df["In"] == "")
+                ]
 
-                    if len(match) > 0:
-                        idx = match.index[0]
-                        df.at[idx, "In"] = current_time
-                        message = "✅ IN recorded"
-                    else:
-                        new_row = {
-                            "No": len(df) + 1,
-                            "Name": name,
-                            "ID": str(staff_id),
-                            "Item": item,
-                            "Date": current_date,
-                            "Out": current_time,
-                            "In": ""
-                        }
+                if len(match) > 0:
+                    idx = match.index[0]
+                    df.at[idx, "In"] = current_time
+                    message = "✅ IN recorded"
+                else:
+                    new_row = {
+                        "No": len(df) + 1,
+                        "Name": name,
+                        "ID": str(staff_id),
+                        "Item": item,
+                        "Date": current_date,
+                        "Out": current_time,
+                        "In": ""
+                    }
 
-                        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                        message = "✅ OUT recorded"
+                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+                    message = "✅ OUT recorded"
 
-                    save_excel(df)
+                save_excel(df)
 
-                except:
-                    message = "❌ Invalid barcode format (use Name|ID|Item)"
+            else:
+                message = "❌ Fill all fields"
 
     return render_template_string(template, message=message, table=df.to_html(index=False))
 
