@@ -3,14 +3,17 @@ import pandas as pd
 from datetime import datetime
 import os
 import shutil
-import pytz   # ✅ timezone fix
+import pytz
 
 app = Flask(__name__)
 
 FILE_PATH = "Inventory.xlsx"
 BACKUP_PATH = "Inventory_backup.xlsx"
 
-# ✅ Prevent duplicate scans
+# 🔐 SET YOUR PASSWORD HERE
+CLEAR_PASSWORD = "admin123"
+
+# ✅ Duplicate scan control
 LAST_SCAN = {"key": None, "time": None}
 BLOCK_SECONDS = 5
 
@@ -88,11 +91,11 @@ def index():
 
         <br>
 
+        <!-- CLEAR with password -->
         <form method="POST" style="display:inline;">
-            <button name="clear"
-                onclick="return confirm('Delete ALL records?');">
-                🗑️ Clear
-            </button>
+            Password:
+            <input type="password" name="clear_password" required>
+            <button name="clear">🗑️ Clear</button>
         </form>
 
         <form method="POST" style="display:inline;">
@@ -114,11 +117,16 @@ def index():
 
     if request.method == "POST":
 
-        # 🗑️ CLEAR
+        # 🔐 CLEAR WITH PASSWORD
         if "clear" in request.form:
-            clear_records()
-            df = load_excel()
-            message = "🗑️ Records cleared"
+            entered_password = request.form.get("clear_password")
+
+            if entered_password == CLEAR_PASSWORD:
+                clear_records()
+                df = load_excel()
+                message = "🗑️ Records cleared successfully"
+            else:
+                message = "❌ Wrong password"
 
         # ↩️ UNDO
         elif "undo" in request.form:
@@ -135,11 +143,11 @@ def index():
 
             if name and staff_id and item:
 
-                # ✅ TIMEZONE FIX (Singapore/Malaysia)
+                # ✅ Correct timezone
                 tz = pytz.timezone("Asia/Singapore")
                 now = datetime.now(tz)
 
-                # ✅ Duplicate scan control
+                # ✅ Duplicate check
                 scan_key = f"{name}-{staff_id}-{item}"
 
                 if LAST_SCAN["key"] == scan_key:
@@ -157,7 +165,6 @@ def index():
                 current_time = now.strftime("%H:%M:%S")
                 current_date = now.strftime("%d/%m/%y")
 
-                # ✅ Check existing open record
                 match = df[
                     (df["Name"] == name) &
                     (df["ID"].astype(str) == str(staff_id)) &
